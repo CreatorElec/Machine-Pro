@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>机器学习实验平台</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <h1>🧪 机器学习实验平台</h1>
+        <p>选择经典数据集与算法 · 配置参数 · 一键训练与评估</p>
+      </div>
+      <span class="stack-badge">FastAPI + scikit-learn</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ============ 左侧配置面板 ============ -->
+    <aside class="config-panel">
+      <!-- 数据集 -->
+      <section class="card">
+        <h2><span class="step">1</span> 数据集</h2>
+        <div class="row">
+          <select id="dataset-select" class="grow"></select>
+          <label class="upload-btn">
+            上传 CSV
+            <input type="file" id="csv-file" accept=".csv,text/csv" hidden />
+          </label>
+        </div>
+        <div id="dataset-meta"></div>
+
+        <div class="field">
+          <label for="target-select">目标列 (Target)</label>
+          <select id="target-select"></select>
+        </div>
+        <div class="field">
+          <label>特征列 (Features)</label>
+          <div id="feature-list" class="feature-list"></div>
+          <div class="feature-actions">
+            <button type="button" id="check-all" class="mini-btn">全选数值</button>
+            <button type="button" id="uncheck-all" class="mini-btn">清空</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 算法 -->
+      <section class="card">
+        <h2><span class="step">2</span> 算法与参数</h2>
+        <div class="field">
+          <label>任务类型</label>
+          <div id="task-badge" class="task-badge task-classification">分类</div>
+        </div>
+        <div class="field">
+          <label for="algorithm-select">算法</label>
+          <select id="algorithm-select"></select>
+        </div>
+        <p id="algorithm-desc" class="hint"></p>
+        <div id="param-form" class="param-form"></div>
+      </section>
+
+      <!-- 训练设置 -->
+      <section class="card">
+        <h2><span class="step">3</span> 训练设置</h2>
+        <div class="field">
+          <label>测试集比例: <strong id="test-size-val">20%</strong></label>
+          <input type="range" id="test-size" min="5" max="50" step="5" value="20" />
+        </div>
+        <div class="field">
+          <label for="random-state">随机种子 (random_state)</label>
+          <input type="number" id="random-state" value="42" min="0" max="99999" />
+        </div>
+        <button id="train-btn" class="primary">🚀 开始训练</button>
+        <div id="train-status" class="status"></div>
+      </section>
+    </aside>
+
+    <!-- ============ 右侧结果面板 ============ -->
+    <section class="result-panel">
+      <div id="empty-state" class="empty">
+        <div class="empty-icon">📊</div>
+        <h2>配置完成后点击「开始训练」</h2>
+        <p>评估指标、混淆矩阵、分类报告、特征重要性等结果将展示在这里</p>
+      </div>
+      <div id="results" class="hidden"></div>
+    </section>
+  </main>
+
+  <footer class="footer">机器学习实验平台 · 内置企鹅/鸢尾花/葡萄酒/乳腺癌/糖尿病等经典数据集</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
