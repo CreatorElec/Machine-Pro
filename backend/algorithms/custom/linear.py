@@ -228,6 +228,15 @@ class MyLinearSVM(BaseEstimator, ClassifierMixin):
 
         self.coef_ = W                              # (K, d)
         self.intercept_ = b
+
+        # Platt 缩放: 将每个 OvR 决策值校准为类概率 (供 predict_proba / ROC 使用)
+        F = Xs @ W.T + b
+        self._platt_A_ = np.zeros(K)
+        self._platt_B_ = np.zeros(K)
+        for k in range(K):
+            self._platt_A_[k], self._platt_B_[k] = _fit_platt(
+                F[:, k], (y == self.classes_[k]).astype(float)
+            )
         return self
 
     def decision_function(self, X) -> np.ndarray:
@@ -235,11 +244,59 @@ class MyLinearSVM(BaseEstimator, ClassifierMixin):
         return Xs @ self.coef_.T + self.intercept_
 
     def predict_proba(self, X) -> np.ndarray:
-        # 以决策值的 softmax 作为近似的类概率 (供 ROC 使用)
-        return softmax(self.decision_function(X))
+        # 用 Platt 缩放把各 OvR 决策值映射为校准概率, 再归一化到和为 1
+        F = self.decision_function(X)
+        proba = np.empty_like(F, dtype=float)
+        for k in range(F.shape[1]):
+            proba[:, k] = _sigmoid(self._platt_A_[k] * F[:, k] + self._platt_B_[k])
+        total = proba.sum(axis=1, keepdims=True)
+        return proba / np.where(total <= 1e-12, 1.0, total)
 
     def predict(self, X) -> np.ndarray:
         return self.classes_[np.argmax(self.decision_function(X), axis=1)]
+
+
+def _sigmoid(z: np.ndarray) -> np.ndarray:
+    """数值稳定的 sigmoid 函数 σ(z) = 1 / (1 + e^{-z})。"""
+    z = np.asarray(z, dtype=float)
+    out = np.empty_like(z)
+    pos = z >= 0.0
+    out[pos] = 1.0 / (1.0 + np.exp(-z[pos]))
+    ez = np.exp(z[~pos])
+    out[~pos] = ez / (1.0 + ez)
+    return out
+
+
+def _fit_platt(f: np.ndarray, t: np.ndarray, max_iter: int = 100) -> tuple[float, float]:
+    """Platt 缩放: 拟合 P(t=1) = σ(A·f + B), 用 Newton 法最大化对数似然。
+
+    f: 训练样本的 OvR 决策值 (n,);  t: 0/1 目标 (是否属于该类)。
+    返回 (A, B)。
+    """
+    f = np.asarray(f, dtype=float).ravel()
+    t = np.asarray(t, dtype=float).ravel()
+    prior = float(np.clip(t.mean(), 1e-6, 1.0 - 1e-6))
+    A, B = 0.0, float(np.log(prior / (1.0 - prior)))
+
+    for _ in range(max_iter):
+        p = _sigmoid(A * f + B)
+        g0 = float(np.sum((p - t) * f))   # ∂L/∂A (交叉熵损失梯度)
+        g1 = float(np.sum(p - t))         # ∂L/∂B
+        w = p * (1.0 - p)
+        h00 = float(np.sum(w * f * f))
+        h01 = float(np.sum(w * f))
+        h11 = float(np.sum(w))
+        det = h00 * h11 - h01 * h01
+        if abs(det) < 1e-12:
+            break
+        # Newton 步: Δ = -H^{-1}·g
+        dA = -(h11 * g0 - h01 * g1) / det
+        dB = -(-h01 * g0 + h00 * g1) / det
+        A += dA
+        B += dB
+        if abs(dA) < 1e-6 and abs(dB) < 1e-6:
+            break
+    return A, B
 
 
 def _emit(model, iteration: int, loss: float) -> None:
