@@ -147,11 +147,6 @@
           <h2><span class="step">3</span> 无监督算法</h2>
           <div class="field">
             <label>算法</label>
-            <select v-model="unsupAlgorithm">
-              <option v-for="a in algorithms.unsupervised" :key="a.key" :value="a.key">
-                {{ a.name }} {{ a.source === 'custom' ? '· 自研' : '' }}
-              </option>
-            </select>
           </div>
           <p v-if="currentUnsupAlg" class="hint">
             <span class="src-badge" :class="currentUnsupAlg.source">{{ currentUnsupAlg.source === 'custom' ? '自研 numpy 实现' : 'scikit-learn' }}</span>

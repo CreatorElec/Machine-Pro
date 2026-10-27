@@ -23,6 +23,7 @@ createApp({
       mode: "train",
       modes: [
         { key: "train", name: "单模型训练", icon: "🎯" },
+        { key: "compare", name: "多算法对比", icon: "⚔️" },
         { key: "unsupervised", name: "聚类/降维", icon: "🧩" },
         { key: "viz", name: "可视化", icon: "📊" },
       ],
@@ -44,7 +45,6 @@ createApp({
       unsupResult: null,
       vizResult: null,
       liveProgress: [],
-      lossMap: {},
       wsConn: null,
     };
   },
@@ -89,9 +89,6 @@ createApp({
     hasResult() {
       return !!(this.trainResult || this.compareResult ||
                 this.unsupResult || this.vizResult);
-    },
-    hasLoss() {
-      return Object.keys(this.lossMap).length > 0;
     },
     progressPct() {
       if (!this.liveProgress.length) return 0;
@@ -228,7 +225,6 @@ createApp({
       this.trainResult = this.compareResult = null;
       this.unsupResult = this.vizResult = null;
       this.liveProgress = [];
-      this.lossMap = {};
       this.setStatus("");
       if (this.wsConn) { this.wsConn.close(); this.wsConn = null; }
       this.running = false;
@@ -316,13 +312,6 @@ createApp({
           } else {
             item.status = "running";
           }
-        },
-        onLoss: (ev) => {
-          if (!this.lossMap[ev.algorithm]) this.lossMap[ev.algorithm] = [];
-          this.lossMap[ev.algorithm].push({ iter: ev.iter, loss: ev.loss });
-          this.$nextTick(() => {
-            if (this.$refs.lossChart) Charts.lossCurve(this.$refs.lossChart, this.lossMap);
-          });
         },
         onResult: (ev) => {
           const item = findItem(ev.algorithm);
