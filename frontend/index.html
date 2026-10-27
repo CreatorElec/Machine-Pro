@@ -141,10 +141,6 @@
         <!-- 多算法对比: 算法多选 -->
         <section class="card" v-if="mode === 'compare'">
           <h2><span class="step">3</span> 选择对比算法</h2>
-          <div class="compare-source-toggle">
-            <label><input type="checkbox" v-model="compareShowSklearn" /> sklearn</label>
-            <label><input type="checkbox" v-model="compareShowCustom" /> 自研</label>
-          </div>
           <div class="alg-check-list">
             <label v-for="a in compareCandidates" :key="a.key" class="alg-check">
               <input type="checkbox" :value="a.key" v-model="compareSelection" />

@@ -31,14 +31,16 @@ def run_comparison(df: pd.DataFrame, req: CompareRequest, progress_cb: ProgressC
     validate_columns(df, req.features, req.target)
     X, y, classes, _, _ = preprocess(df, req.features, req.target, task)
 
-    if not req.algorithms:
+    # 多算法对比仅保留 sklearn 实现 (自研算法已从前端对比入口移除, 此处防御性过滤)
+    selected = [s for s in req.algorithms if get_algorithm(task, s.key).source == "sklearn"]
+    if not selected:
         raise ValueError("请至少选择一个算法")
 
     metric_key = "accuracy" if task == "classification" else "r2"
-    total = len(req.algorithms)
+    total = len(selected)
     results: List[Dict[str, Any]] = []
 
-    for i, sel in enumerate(req.algorithms):
+    for i, sel in enumerate(selected):
         def emit(event: Dict[str, Any]) -> None:
             if progress_cb is not None:
                 progress_cb(event)

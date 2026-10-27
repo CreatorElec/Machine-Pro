@@ -32,8 +32,6 @@ createApp({
       paramValues: {},
       paramGrid: {},
       compareSelection: [],
-      compareShowSklearn: true,
-      compareShowCustom: true,
       unsupAlgorithm: "",
       unsupParamValues: {},
       vizKind: "roc",
@@ -82,9 +80,8 @@ createApp({
       return this.algorithms.unsupervised.find((a) => a.key === this.unsupAlgorithm) || null;
     },
     compareCandidates() {
-      return this.algorithmList.filter((a) =>
-        (a.source === "sklearn" && this.compareShowSklearn) ||
-        (a.source === "custom" && this.compareShowCustom));
+      // 多算法对比仅保留 sklearn 实现 (自研算法已从对比入口移除)
+      return this.algorithmList.filter((a) => a.source === "sklearn");
     },
     testSize() {
       return this.testSizePct / 100;
@@ -152,7 +149,7 @@ createApp({
         this.algorithm = list[0].key;
       }
       if (!this.compareSelection.length) {
-        this.compareSelection = list.map((a) => a.key);
+        this.compareSelection = list.filter((a) => a.source === "sklearn").map((a) => a.key);
       }
     },
 
