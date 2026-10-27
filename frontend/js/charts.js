@@ -215,24 +215,6 @@ const Charts = (() => {
     }, true);
   }
 
-  /* 实时训练损失曲线 (多算法, 增量更新) */
-  function lossCurve(el, lossMap) {
-    const names = Object.keys(lossMap);
-    make(el).setOption({
-      title: { text: "自研模型训练损失 (实时)", left: "center", textStyle: { fontSize: 13 } },
-      tooltip: { trigger: "axis", confine: true },
-      legend: { bottom: 0, type: "scroll", textStyle: { fontSize: 10 } },
-      grid: { left: 60, right: 20, top: 40, bottom: 50 },
-      xAxis: { type: "value", name: "迭代" },
-      yAxis: { type: "value", name: "Loss", scale: true },
-      series: names.map((n, i) => ({
-        name: n, type: "line", showSymbol: false,
-        data: lossMap[n].map((p) => [p.iter, p.loss]),
-        lineStyle: { width: 2 }, itemStyle: { color: PALETTE[i % PALETTE.length] },
-      })),
-    });
-  }
-
   return { metricBar, rankingBar, confusionMatrix, importance, roc, learningCurve,
-           decisionBoundary, scatter2d, elbow, variance, lossCurve };
+           decisionBoundary, scatter2d, elbow, variance };
 })();

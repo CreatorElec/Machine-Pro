@@ -204,10 +204,6 @@ table.preview th { background: #f8faff; position: sticky; top: 0; }
 .src-badge.sklearn { background: #e8f0ff; color: #3b63d8; }
 .src-badge.custom { background: #f1ebfc; color: #7c53c9; }
 
-.src-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.src-dot.sklearn { background: var(--primary); }
-.src-dot.custom { background: var(--custom); }
-
 /* ---------- 参数表单 ---------- */
 .param-form { margin-top: 8px; }
 .param-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }

@@ -136,7 +136,6 @@
           <div class="alg-check-list">
             <label v-for="a in compareCandidates" :key="a.key" class="alg-check">
               <input type="checkbox" :value="a.key" v-model="compareSelection" />
-              <span class="src-dot" :class="a.source"></span>
               {{ a.name }}
             </label>
           </div>
@@ -217,12 +216,10 @@
             <li v-for="p in liveProgress" :key="p.algorithm" :class="p.status">
               <span class="live-icon">{{ p.status === 'done' ? '✅' : p.status === 'running' ? '🏃' : p.status === 'error' ? '❌' : '⏸' }}</span>
               {{ p.algorithm_name }}
-              <span class="src-badge" :class="p.source">{{ p.source === 'custom' ? '自研' : 'sklearn' }}</span>
               <span v-if="p.score !== undefined" class="live-score">{{ p.score }}</span>
               <span v-if="p.error" class="live-error">{{ p.error }}</span>
             </li>
           </ul>
-          <div class="chart" ref="lossChart" v-show="hasLoss"></div>
         </div>
 
         <!-- 单模型训练结果 -->
@@ -283,14 +280,13 @@
             <h3>🏆 排名 (按 {{ metricLabel(compareResult.metric_key) }})</h3>
             <table class="data-table">
               <thead>
-                <tr><th>#</th><th>算法</th><th>来源</th><th>{{ metricLabel(compareResult.metric_key) }}</th>
+                <tr><th>#</th><th>算法</th><th>{{ metricLabel(compareResult.metric_key) }}</th>
                     <th v-for="m in extraMetricKeys" :key="m">{{ metricLabel(m) }}</th></tr>
               </thead>
               <tbody>
                 <tr v-for="r in compareResult.ranking" :key="r.algorithm">
                   <td><span class="rank-badge" :class="'rank-' + r.rank">{{ r.rank }}</span></td>
                   <td>{{ r.algorithm_name }}</td>
-                  <td><span class="src-badge" :class="r.source">{{ r.source === 'custom' ? '自研' : 'sklearn' }}</span></td>
                   <td><strong>{{ r.score }}</strong></td>
                   <td v-for="m in extraMetricKeys" :key="m">{{ r.metrics[m] }}</td>
                 </tr>
