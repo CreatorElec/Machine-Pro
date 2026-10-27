@@ -24,13 +24,11 @@ createApp({
       modes: [
         { key: "train", name: "单模型训练", icon: "🎯" },
         { key: "compare", name: "多算法对比", icon: "⚔️" },
-        { key: "tune", name: "网格调参", icon: "🎛️" },
         { key: "unsupervised", name: "聚类/降维", icon: "🧩" },
         { key: "viz", name: "可视化", icon: "📊" },
       ],
       algorithm: "",
       paramValues: {},
-      paramGrid: {},
       compareSelection: [],
       unsupAlgorithm: "",
       unsupParamValues: {},
@@ -44,7 +42,6 @@ createApp({
       statusError: false,
       trainResult: null,
       compareResult: null,
-      tuneResult: null,
       unsupResult: null,
       vizResult: null,
       liveProgress: [],
@@ -87,11 +84,11 @@ createApp({
       return this.testSizePct / 100;
     },
     execLabel() {
-      return { train: "🚀 开始训练", compare: "⚔️ 开始对比", tune: "🎛️ 开始搜索",
+      return { train: "🚀 开始训练", compare: "⚔️ 开始对比",
                unsupervised: "🧩 开始分析", viz: "📊 生成图表" }[this.mode];
     },
     hasResult() {
-      return !!(this.trainResult || this.compareResult || this.tuneResult ||
+      return !!(this.trainResult || this.compareResult ||
                 this.unsupResult || this.vizResult);
     },
     hasLoss() {
@@ -119,7 +116,6 @@ createApp({
   watch: {
     currentAlg(alg) {
       this.paramValues = {};
-      this.paramGrid = {};
       if (alg) {
         alg.params.forEach((p) => { this.paramValues[p.name] = p.default; });
       }
@@ -227,11 +223,10 @@ createApp({
     switchMode(m) {
       this.mode = m;
       this.clearResults();
-      if (m === "tune" && this.cvFolds < 2) this.cvFolds = 3;
     },
 
     clearResults() {
-      this.trainResult = this.compareResult = this.tuneResult = null;
+      this.trainResult = this.compareResult = null;
       this.unsupResult = this.vizResult = null;
       this.liveProgress = [];
       this.lossMap = {};
@@ -264,7 +259,7 @@ createApp({
       this.clearResults();
       this.running = true;
       const fn = {
-        train: this.doTrain, compare: this.doCompare, tune: this.doTune,
+        train: this.doTrain, compare: this.doCompare,
         unsupervised: this.doUnsupervised, viz: this.doViz,
       }[this.mode];
       fn.call(this);
@@ -356,31 +351,6 @@ createApp({
           this.running = false;
         },
       });
-    },
-
-    /* ---------- 网格调参 ---------- */
-    async doTune() {
-      const paramGrid = {};
-      Object.entries(this.paramGrid).forEach(([k, v]) => {
-        const vals = String(v).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-        if (vals.length) paramGrid[k] = vals;
-      });
-      if (!Object.keys(paramGrid).length) {
-        this.setStatus("请至少为一个参数填写候选值", true);
-        this.running = false;
-        return;
-      }
-      this.setStatus("网格搜索中...");
-      try {
-        const payload = { ...this.basePayload(), algorithm: this.algorithm,
-                          param_grid: paramGrid, cv_folds: Math.max(2, this.cvFolds) };
-        this.tuneResult = await Api.post("/api/tune", payload);
-        this.setStatus("搜索完成");
-      } catch (err) {
-        this.setStatus(err.message, true);
-      } finally {
-        this.running = false;
-      }
     },
 
     /* ---------- 无监督 ---------- */

@@ -24,8 +24,7 @@ from datasets import (
     summarize_dataframe,
 )
 from pipeline import train_and_evaluate
-from schemas import CompareRequest, TrainRequest, TuneRequest, UnsupervisedRequest, VizRequest
-from tuning import grid_search
+from schemas import CompareRequest, TrainRequest, UnsupervisedRequest, VizRequest
 from unsupervised import run_unsupervised
 from viz import (
     decision_boundary_data,
@@ -129,12 +128,6 @@ def train(req: TrainRequest):
 def compare(req: CompareRequest):
     """多算法对比 (同步版本; 实时进度请用 WebSocket /ws/train)。"""
     return _guard(lambda: run_comparison(load_dataframe(req.dataset), req))
-
-
-@app.post("/api/tune")
-def tune(req: TuneRequest):
-    """网格搜索调参。"""
-    return _guard(lambda: grid_search(load_dataframe(req.dataset), req))
 
 
 @app.post("/api/unsupervised")

@@ -12,7 +12,7 @@
       <div class="topbar-inner">
         <div>
           <h1>🧪 机器学习实验平台</h1>
-          <p>自研算法 + scikit-learn · 多算法对比 · 调参与可视化</p>
+          <p>自研算法 + scikit-learn · 多算法对比 · 可视化</p>
         </div>
         <span class="stack-badge">Vue3 + FastAPI + WebSocket</span>
       </div>
@@ -89,8 +89,8 @@
           </div>
         </section>
 
-        <!-- 算法与参数: 单模型 / 调参 / 可视化 -->
-        <section class="card" v-if="['train', 'tune', 'viz'].includes(mode)">
+        <!-- 算法与参数: 单模型 / 可视化 -->
+        <section class="card" v-if="['train', 'viz'].includes(mode)">
           <h2><span class="step">3</span> 算法与参数</h2>
           <div class="field" v-if="mode === 'viz'">
             <label>可视化类型</label>
@@ -115,16 +115,8 @@
               {{ currentAlg.description }}
             </p>
 
-            <!-- 调参模式: 网格编辑器 -->
-            <div v-if="mode === 'tune' && currentAlg" class="param-form">
-              <p class="hint">为要搜索的参数填写候选值 (逗号分隔); 留空的参数不参与搜索</p>
-              <div v-for="p in currentAlg.params" :key="p.name" class="param-row">
-                <label>{{ p.label }} <code>{{ p.name }}</code></label>
-                <input type="text" v-model="paramGrid[p.name]" :placeholder="`默认 ${fmtDefault(p.default)}`" />
-              </div>
-            </div>
             <!-- 训练/可视化: 单值参数表单 -->
-            <div v-else-if="currentAlg && currentAlg.params.length" class="param-form">
+            <div v-if="currentAlg && currentAlg.params.length" class="param-form">
               <div v-for="p in currentAlg.params" :key="p.name" class="param-row">
                 <label>{{ p.label }}</label>
                 <select v-if="p.type === 'select'" v-model="paramValues[p.name]">
@@ -194,10 +186,9 @@
           <div class="field checkbox-field">
             <label><input type="checkbox" v-model="standardize" /> 特征标准化 (StandardScaler)</label>
           </div>
-          <div class="field" v-if="['train', 'compare', 'tune'].includes(mode)">
+          <div class="field" v-if="['train', 'compare'].includes(mode)">
             <label>K 折交叉验证: <strong>{{ cvFolds > 1 ? cvFolds + ' 折' : '关闭' }}</strong></label>
             <input type="range" min="0" max="10" step="1" v-model.number="cvFolds" />
-            <p class="hint" v-if="mode === 'tune'">调参模式至少 2 折</p>
           </div>
 
           <button class="primary" :disabled="running" @click="execute">
@@ -302,32 +293,6 @@
                   <td><span class="src-badge" :class="r.source">{{ r.source === 'custom' ? '自研' : 'sklearn' }}</span></td>
                   <td><strong>{{ r.score }}</strong></td>
                   <td v-for="m in extraMetricKeys" :key="m">{{ r.metrics[m] }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-
-        <!-- 调参结果 -->
-        <template v-if="mode === 'tune' && tuneResult">
-          <div class="card best-card">
-            <h3>🎯 最佳组合 ({{ tuneResult.scoring }} · {{ tuneResult.cv_folds }} 折)</h3>
-            <div class="best-score">{{ tuneResult.best_score }}</div>
-            <div class="best-params">
-              <span v-for="(v, k) in tuneResult.best_params" :key="k" class="param-chip">{{ k }} = {{ v === null ? '无限制' : v }}</span>
-            </div>
-            <p class="hint">{{ tuneResult.algorithm_name }} · 共 {{ tuneResult.n_candidates }} 组候选</p>
-          </div>
-          <div class="card">
-            <h3>全部候选</h3>
-            <table class="data-table">
-              <thead><tr><th>排名</th><th>参数</th><th>均值</th><th>标准差</th></tr></thead>
-              <tbody>
-                <tr v-for="(r, i) in tuneResult.results" :key="i">
-                  <td>{{ r.rank }}</td>
-                  <td><code v-for="(v, k) in r.params" :key="k" class="param-chip">{{ k }}={{ v === null ? '无限制' : v }}</code></td>
-                  <td><strong>{{ r.mean_score }}</strong></td>
-                  <td>± {{ r.std_score }}</td>
                 </tr>
               </tbody>
             </table>

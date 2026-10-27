@@ -36,21 +36,6 @@ class CompareRequest(BaseModel):
     cv_folds: int = Field(0, ge=0, le=10)
 
 
-class TuneRequest(BaseModel):
-    """网格搜索调参请求。"""
-
-    dataset: str
-    target: str
-    features: List[str]
-    algorithm: str
-    param_grid: Dict[str, List[Any]] = Field(default_factory=dict)
-    task: str = "auto"
-    test_size: float = Field(0.2, ge=0.05, le=0.5)
-    random_state: int = 42
-    standardize: bool = False
-    cv_folds: int = Field(3, ge=2, le=10)
-
-
 class UnsupervisedRequest(BaseModel):
     dataset: str
     features: List[str]
