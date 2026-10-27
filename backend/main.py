@@ -1,14 +1,21 @@
-"""FastAPI 主应用: 机器学习实验平台后端。"""
+"""FastAPI 主应用: 机器学习实验平台后端。
+
+路由顺序: API 路由 -> WebSocket 路由 -> 前端静态文件挂载 (mount 必须在最后)。
+"""
 from __future__ import annotations
 
+import asyncio
 import uuid
 from pathlib import Path
+from typing import Any, Dict
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
-from algorithms import CLASSIFICATION_ALGORITHMS, REGRESSION_ALGORITHMS
+from algorithms import algorithms_meta
+from compare import run_comparison
 from datasets import (
     DATASETS,
     UPLOADED_DATASETS,
@@ -17,9 +24,17 @@ from datasets import (
     summarize_dataframe,
 )
 from pipeline import train_and_evaluate
-from schemas import TrainRequest
+from schemas import CompareRequest, TrainRequest, TuneRequest, UnsupervisedRequest, VizRequest
+from tuning import grid_search
+from unsupervised import run_unsupervised
+from viz import (
+    decision_boundary_data,
+    learning_curve_data,
+    pca_scatter_data,
+    roc_curve_data,
+)
 
-app = FastAPI(title="机器学习实验平台", version="1.0.0")
+app = FastAPI(title="机器学习实验平台", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,11 +80,8 @@ def dataset_info(key: str):
 
 @app.get("/api/algorithms")
 def list_algorithms():
-    """返回分类与回归算法的定义及超参数元数据。"""
-    return {
-        "classification": [a.to_dict() for a in CLASSIFICATION_ALGORITHMS.values()],
-        "regression": [a.to_dict() for a in REGRESSION_ALGORITHMS.values()],
-    }
+    """返回分类/回归/无监督算法的定义及超参数元数据 (含 source: sklearn/custom)。"""
+    return algorithms_meta()
 
 
 @app.post("/api/upload")
@@ -95,20 +107,114 @@ def uploaded_dataset_info(dataset_id: str):
     return info
 
 
-@app.post("/api/train")
-def train(req: TrainRequest):
-    """训练模型并返回评估结果。"""
+def _guard(fn, *args):
+    """统一异常 -> HTTP 错误码。"""
     try:
-        df = load_dataframe(req.dataset)
-        return train_and_evaluate(df, req)
+        return fn(*args)
     except HTTPException:
         raise
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(500, f"训练失败: {exc}") from exc
+        raise HTTPException(500, f"执行失败: {exc}") from exc
 
 
-# 前端静态文件 (必须在所有 API 路由之后挂载)
+@app.post("/api/train")
+def train(req: TrainRequest):
+    """训练单个模型并返回评估结果。"""
+    return _guard(lambda: train_and_evaluate(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/compare")
+def compare(req: CompareRequest):
+    """多算法对比 (同步版本; 实时进度请用 WebSocket /ws/train)。"""
+    return _guard(lambda: run_comparison(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/tune")
+def tune(req: TuneRequest):
+    """网格搜索调参。"""
+    return _guard(lambda: grid_search(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/unsupervised")
+def unsupervised(req: UnsupervisedRequest):
+    """无监督任务: 聚类评估 / PCA 降维。"""
+    return _guard(lambda: run_unsupervised(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/viz/roc")
+def viz_roc(req: VizRequest):
+    """ROC 曲线数据 (分类)。"""
+    return _guard(lambda: roc_curve_data(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/viz/learning-curve")
+def viz_learning_curve(req: VizRequest):
+    """学习曲线数据。"""
+    return _guard(lambda: learning_curve_data(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/viz/decision-boundary")
+def viz_decision_boundary(req: VizRequest):
+    """决策边界数据 (分类, 2 特征或 PCA 降维)。"""
+    return _guard(lambda: decision_boundary_data(load_dataframe(req.dataset), req))
+
+
+@app.post("/api/viz/pca-scatter")
+def viz_pca_scatter(req: VizRequest):
+    """PCA 2D 散点数据 (探索性分析, target 可选)。"""
+    return _guard(lambda: pca_scatter_data(load_dataframe(req.dataset), req))
+
+
+# --------------------------------------------------------------------------- #
+# WebSocket: 训练进度实时推送 (多算法对比)
+# --------------------------------------------------------------------------- #
+@app.websocket("/ws/train")
+async def ws_train(ws: WebSocket):
+    """训练进度推送。客户端发送 CompareRequest JSON, 服务端按事件流回推:
+
+    {"type": "start", "total"} ->
+    {"type": "progress", "index", "algorithm", ...} ->
+    {"type": "loss", "algorithm", "iter", "loss"} (自研 GD 模型) ->
+    {"type": "result", "algorithm", "result"} ->
+    {"type": "done", "comparison"} / {"type": "error", "message"}
+    """
+    await ws.accept()
+    try:
+        payload = await ws.receive_json()
+    except WebSocketDisconnect:
+        return
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def emit(event: Dict[str, Any]) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
+    def work() -> None:
+        try:
+            req = CompareRequest(**payload)
+            df = load_dataframe(req.dataset)
+            emit({"type": "start", "total": len(req.algorithms)})
+            comparison = run_comparison(df, req, progress_cb=emit)
+            emit({"type": "done", "comparison": comparison})
+        except Exception as exc:  # noqa: BLE001
+            emit({"type": "error", "message": str(exc)})
+
+    worker = asyncio.create_task(run_in_threadpool(work))
+    try:
+        while True:
+            event = await queue.get()
+            await ws.send_json(event)
+            if event.get("type") in ("done", "error"):
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await worker
+
+
+# 前端静态文件 (必须在所有 API/WS 路由之后挂载)
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

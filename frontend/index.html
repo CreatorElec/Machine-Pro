@@ -4,92 +4,378 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>机器学习实验平台</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div>
-        <h1>🧪 机器学习实验平台</h1>
-        <p>选择经典数据集与算法 · 配置参数 · 一键训练与评估</p>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <h1>🧪 机器学习实验平台</h1>
+          <p>自研算法 + scikit-learn · 多算法对比 · 调参与可视化</p>
+        </div>
+        <span class="stack-badge">Vue3 + FastAPI + WebSocket</span>
       </div>
-      <span class="stack-badge">FastAPI + scikit-learn</span>
-    </div>
-  </header>
+    </header>
 
-  <main class="layout">
-    <!-- ============ 左侧配置面板 ============ -->
-    <aside class="config-panel">
-      <!-- 数据集 -->
-      <section class="card">
-        <h2><span class="step">1</span> 数据集</h2>
-        <div class="row">
-          <select id="dataset-select" class="grow"></select>
-          <label class="upload-btn">
-            上传 CSV
-            <input type="file" id="csv-file" accept=".csv,text/csv" hidden />
-          </label>
-        </div>
-        <div id="dataset-meta"></div>
-
-        <div class="field">
-          <label for="target-select">目标列 (Target)</label>
-          <select id="target-select"></select>
-        </div>
-        <div class="field">
-          <label>特征列 (Features)</label>
-          <div id="feature-list" class="feature-list"></div>
-          <div class="feature-actions">
-            <button type="button" id="check-all" class="mini-btn">全选数值</button>
-            <button type="button" id="uncheck-all" class="mini-btn">清空</button>
+    <main class="layout">
+      <!-- ============ 左侧配置面板 ============ -->
+      <aside class="config-panel">
+        <!-- 数据集 -->
+        <section class="card">
+          <h2><span class="step">1</span> 数据集</h2>
+          <div class="row">
+            <select v-model="datasetRef" class="grow" @change="selectDataset">
+              <option v-for="d in datasets" :key="d.key" :value="d.key">{{ d.name }}</option>
+            </select>
+            <label class="upload-btn">
+              上传 CSV
+              <input type="file" accept=".csv,text/csv" hidden @change="onUpload" />
+            </label>
           </div>
+
+          <template v-if="info">
+            <div class="meta-grid">
+              <div><span class="meta-label">样本数</span><span class="meta-value">{{ info.n_rows }}</span></div>
+              <div><span class="meta-label">特征数</span><span class="meta-value">{{ info.columns.length }}</span></div>
+              <div><span class="meta-label">缺失值</span><span class="meta-value">{{ totalMissing }}</span></div>
+            </div>
+            <p class="hint">{{ info.description }}</p>
+            <div class="preview-wrap">
+              <table class="preview">
+                <thead><tr><th v-for="c in info.columns" :key="c">{{ c }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(row, i) in info.preview" :key="i">
+                    <td v-for="c in info.columns" :key="c">{{ row[c] === null ? "—" : row[c] }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="field" v-if="needsTarget">
+              <label>目标列 (Target)</label>
+              <select v-model="target" @change="onTargetChange">
+                <option v-for="c in info.columns" :key="c" :value="c">{{ c }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>特征列 (Features)</label>
+              <div class="feature-list">
+                <label v-for="c in featureColumns" :key="c" :title="c">
+                  <input type="checkbox" :value="c" v-model="features" />
+                  <span>{{ c }} {{ info.numeric_columns.includes(c) ? "🔢" : "🏷️" }}</span>
+                </label>
+              </div>
+              <div class="feature-actions">
+                <button type="button" class="mini-btn" @click="selectNumericFeatures">全选数值</button>
+                <button type="button" class="mini-btn" @click="features = []">清空</button>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <!-- 模式切换 -->
+        <section class="card">
+          <h2><span class="step">2</span> 实验模式</h2>
+          <div class="mode-tabs">
+            <button v-for="m in modes" :key="m.key" class="mode-tab"
+                    :class="{ active: mode === m.key }" @click="switchMode(m.key)">
+              {{ m.icon }} {{ m.name }}
+            </button>
+          </div>
+          <div class="field" v-if="needsTarget">
+            <label>任务类型</label>
+            <div class="task-badge" :class="taskClass">{{ task === 'regression' ? '回归' : '分类' }}</div>
+          </div>
+        </section>
+
+        <!-- 算法与参数: 单模型 / 调参 / 可视化 -->
+        <section class="card" v-if="['train', 'tune', 'viz'].includes(mode)">
+          <h2><span class="step">3</span> 算法与参数</h2>
+          <div class="field" v-if="mode === 'viz'">
+            <label>可视化类型</label>
+            <select v-model="vizKind">
+              <option value="roc">ROC 曲线</option>
+              <option value="learning-curve">学习曲线</option>
+              <option value="decision-boundary">决策边界</option>
+              <option value="pca-scatter">PCA 散点 (探索性)</option>
+            </select>
+          </div>
+          <template v-if="mode !== 'viz' || vizKind !== 'pca-scatter'">
+            <div class="field">
+              <label>算法 ({{ algorithmList.length }} 个可选)</label>
+              <select v-model="algorithm">
+                <option v-for="a in algorithmList" :key="a.key" :value="a.key">
+                  {{ a.name }} {{ a.source === 'custom' ? '· 自研' : '' }}
+                </option>
+              </select>
+            </div>
+            <p v-if="currentAlg" class="hint">
+              <span class="src-badge" :class="currentAlg.source">{{ currentAlg.source === 'custom' ? '自研 numpy 实现' : 'scikit-learn' }}</span>
+              {{ currentAlg.description }}
+            </p>
+
+            <!-- 调参模式: 网格编辑器 -->
+            <div v-if="mode === 'tune' && currentAlg" class="param-form">
+              <p class="hint">为要搜索的参数填写候选值 (逗号分隔); 留空的参数不参与搜索</p>
+              <div v-for="p in currentAlg.params" :key="p.name" class="param-row">
+                <label>{{ p.label }} <code>{{ p.name }}</code></label>
+                <input type="text" v-model="paramGrid[p.name]" :placeholder="`默认 ${fmtDefault(p.default)}`" />
+              </div>
+            </div>
+            <!-- 训练/可视化: 单值参数表单 -->
+            <div v-else-if="currentAlg && currentAlg.params.length" class="param-form">
+              <div v-for="p in currentAlg.params" :key="p.name" class="param-row">
+                <label>{{ p.label }}</label>
+                <select v-if="p.type === 'select'" v-model="paramValues[p.name]">
+                  <option v-for="o in p.options" :key="String(o)" :value="o">{{ o === null ? '无限制' : o }}</option>
+                </select>
+                <input v-else type="number" v-model="paramValues[p.name]"
+                       :min="p.min" :max="p.max" :step="p.type === 'int' ? 1 : (p.step || 'any')" />
+              </div>
+            </div>
+            <p v-else-if="currentAlg" class="hint">该算法无可调参数</p>
+          </template>
+        </section>
+
+        <!-- 多算法对比: 算法多选 -->
+        <section class="card" v-if="mode === 'compare'">
+          <h2><span class="step">3</span> 选择对比算法</h2>
+          <div class="compare-source-toggle">
+            <label><input type="checkbox" v-model="compareShowSklearn" /> sklearn</label>
+            <label><input type="checkbox" v-model="compareShowCustom" /> 自研</label>
+          </div>
+          <div class="alg-check-list">
+            <label v-for="a in compareCandidates" :key="a.key" class="alg-check">
+              <input type="checkbox" :value="a.key" v-model="compareSelection" />
+              <span class="src-dot" :class="a.source"></span>
+              {{ a.name }}
+            </label>
+          </div>
+          <p class="hint">已选 {{ compareSelection.length }} 个算法 · 通过 WebSocket 实时推送进度</p>
+        </section>
+
+        <!-- 无监督: 算法选择 -->
+        <section class="card" v-if="mode === 'unsupervised'">
+          <h2><span class="step">3</span> 无监督算法</h2>
+          <div class="field">
+            <label>算法</label>
+            <select v-model="unsupAlgorithm">
+              <option v-for="a in algorithms.unsupervised" :key="a.key" :value="a.key">
+                {{ a.name }} {{ a.source === 'custom' ? '· 自研' : '' }}
+              </option>
+            </select>
+          </div>
+          <p v-if="currentUnsupAlg" class="hint">
+            <span class="src-badge" :class="currentUnsupAlg.source">{{ currentUnsupAlg.source === 'custom' ? '自研 numpy 实现' : 'scikit-learn' }}</span>
+            {{ currentUnsupAlg.description }}
+          </p>
+          <div v-if="currentUnsupAlg && currentUnsupAlg.params.length" class="param-form">
+            <div v-for="p in currentUnsupAlg.params" :key="p.name" class="param-row">
+              <label>{{ p.label }}</label>
+              <select v-if="p.type === 'select'" v-model="unsupParamValues[p.name]">
+                <option v-for="o in p.options" :key="String(o)" :value="o">{{ o === null ? '无限制' : o }}</option>
+              </select>
+              <input v-else type="number" v-model="unsupParamValues[p.name]"
+                     :min="p.min" :max="p.max" :step="p.type === 'int' ? 1 : (p.step || 'any')" />
+            </div>
+          </div>
+        </section>
+
+        <!-- 训练设置 -->
+        <section class="card">
+          <h2><span class="step">4</span> 设置与执行</h2>
+          <template v-if="needsTarget">
+            <div class="field">
+              <label>测试集比例: <strong>{{ Math.round(testSize * 100) }}%</strong></label>
+              <input type="range" min="5" max="50" step="5" v-model.number="testSizePct" />
+            </div>
+            <div class="field">
+              <label>随机种子 (random_state)</label>
+              <input type="number" v-model.number="randomState" min="0" max="99999" />
+            </div>
+          </template>
+          <div class="field checkbox-field">
+            <label><input type="checkbox" v-model="standardize" /> 特征标准化 (StandardScaler)</label>
+          </div>
+          <div class="field" v-if="['train', 'compare', 'tune'].includes(mode)">
+            <label>K 折交叉验证: <strong>{{ cvFolds > 1 ? cvFolds + ' 折' : '关闭' }}</strong></label>
+            <input type="range" min="0" max="10" step="1" v-model.number="cvFolds" />
+            <p class="hint" v-if="mode === 'tune'">调参模式至少 2 折</p>
+          </div>
+
+          <button class="primary" :disabled="running" @click="execute">
+            <span v-if="!running">{{ execLabel }}</span>
+            <span v-else>⏳ 运行中...</span>
+          </button>
+          <div class="status" :class="{ error: statusError }" v-if="status">{{ status }}</div>
+        </section>
+      </aside>
+
+      <!-- ============ 右侧结果面板 ============ -->
+      <section class="result-panel">
+        <div v-if="!hasResult && !running" class="empty">
+          <div class="empty-icon">📊</div>
+          <h2>配置完成后点击「{{ execLabel }}」</h2>
+          <p>评估指标、图表与排名将展示在这里</p>
+        </div>
+
+        <!-- 实时进度 (WebSocket 对比) -->
+        <div v-if="mode === 'compare' && (running || liveProgress.length)" class="card live-card">
+          <h3>⚡ 实时训练进度</h3>
+          <div class="progress-track">
+            <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
+          </div>
+          <ul class="live-list">
+            <li v-for="p in liveProgress" :key="p.algorithm" :class="p.status">
+              <span class="live-icon">{{ p.status === 'done' ? '✅' : p.status === 'running' ? '🏃' : p.status === 'error' ? '❌' : '⏸' }}</span>
+              {{ p.algorithm_name }}
+              <span class="src-badge" :class="p.source">{{ p.source === 'custom' ? '自研' : 'sklearn' }}</span>
+              <span v-if="p.score !== undefined" class="live-score">{{ p.score }}</span>
+              <span v-if="p.error" class="live-error">{{ p.error }}</span>
+            </li>
+          </ul>
+          <div class="chart" ref="lossChart" v-show="hasLoss"></div>
+        </div>
+
+        <!-- 单模型训练结果 -->
+        <template v-if="mode === 'train' && trainResult">
+          <div class="card">
+            <h3>📈 {{ trainResult.algorithm_name }}
+              <span class="src-badge" :class="trainResult.source">{{ trainResult.source === 'custom' ? '自研' : 'sklearn' }}</span>
+            </h3>
+            <p class="hint">训练 {{ trainResult.train_size }} 条 / 测试 {{ trainResult.test_size }} 条
+              <template v-if="trainResult.standardize"> · 已标准化</template>
+            </p>
+            <div class="metric-grid">
+              <div v-for="(v, k) in trainResult.metrics" :key="k" class="metric-card">
+                <div class="metric-name">{{ metricLabel(k) }}</div>
+                <div class="metric-value">{{ v }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="card chart-card" v-if="trainResult.confusion_matrix">
+              <div class="chart" ref="cmChart"></div>
+            </div>
+            <div class="card chart-card" v-if="trainResult.feature_importance.length">
+              <div class="chart" ref="impChart"></div>
+            </div>
+          </div>
+          <div class="card" v-if="trainResult.cv">
+            <h3>🔁 {{ trainResult.cv.folds }} 折交叉验证</h3>
+            <table class="data-table">
+              <thead><tr><th>指标</th><th>均值</th><th>标准差</th></tr></thead>
+              <tbody>
+                <tr v-for="(v, k) in cvRows" :key="k">
+                  <td>{{ metricLabel(k) }}</td><td>{{ v.mean }}</td><td>± {{ v.std }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card" v-if="trainResult.predictions.length">
+            <h3>🔍 预测样例 (前 {{ trainResult.predictions.length }} 条)</h3>
+            <table class="data-table">
+              <thead><tr><th>#</th><th>真实值</th><th>预测值</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="p in trainResult.predictions" :key="p.index">
+                  <td>{{ p.index }}</td><td>{{ p.true }}</td><td>{{ p.pred }}</td>
+                  <td>{{ p.true == p.pred ? '✅' : '❌' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <!-- 多算法对比结果 -->
+        <template v-if="mode === 'compare' && compareResult">
+          <div class="card chart-card">
+            <div class="chart tall" ref="rankChart"></div>
+          </div>
+          <div class="card">
+            <h3>🏆 排名 (按 {{ metricLabel(compareResult.metric_key) }})</h3>
+            <table class="data-table">
+              <thead>
+                <tr><th>#</th><th>算法</th><th>来源</th><th>{{ metricLabel(compareResult.metric_key) }}</th>
+                    <th v-for="m in extraMetricKeys" :key="m">{{ metricLabel(m) }}</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in compareResult.ranking" :key="r.algorithm">
+                  <td><span class="rank-badge" :class="'rank-' + r.rank">{{ r.rank }}</span></td>
+                  <td>{{ r.algorithm_name }}</td>
+                  <td><span class="src-badge" :class="r.source">{{ r.source === 'custom' ? '自研' : 'sklearn' }}</span></td>
+                  <td><strong>{{ r.score }}</strong></td>
+                  <td v-for="m in extraMetricKeys" :key="m">{{ r.metrics[m] }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <!-- 调参结果 -->
+        <template v-if="mode === 'tune' && tuneResult">
+          <div class="card best-card">
+            <h3>🎯 最佳组合 ({{ tuneResult.scoring }} · {{ tuneResult.cv_folds }} 折)</h3>
+            <div class="best-score">{{ tuneResult.best_score }}</div>
+            <div class="best-params">
+              <span v-for="(v, k) in tuneResult.best_params" :key="k" class="param-chip">{{ k }} = {{ v === null ? '无限制' : v }}</span>
+            </div>
+            <p class="hint">{{ tuneResult.algorithm_name }} · 共 {{ tuneResult.n_candidates }} 组候选</p>
+          </div>
+          <div class="card">
+            <h3>全部候选</h3>
+            <table class="data-table">
+              <thead><tr><th>排名</th><th>参数</th><th>均值</th><th>标准差</th></tr></thead>
+              <tbody>
+                <tr v-for="(r, i) in tuneResult.results" :key="i">
+                  <td>{{ r.rank }}</td>
+                  <td><code v-for="(v, k) in r.params" :key="k" class="param-chip">{{ k }}={{ v === null ? '无限制' : v }}</code></td>
+                  <td><strong>{{ r.mean_score }}</strong></td>
+                  <td>± {{ r.std_score }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <!-- 无监督结果 -->
+        <template v-if="mode === 'unsupervised' && unsupResult">
+          <div class="card">
+            <h3>🧩 {{ unsupResult.algorithm_name }}
+              <span class="src-badge" :class="unsupResult.source">{{ unsupResult.source === 'custom' ? '自研' : 'sklearn' }}</span>
+            </h3>
+            <div class="metric-grid" v-if="unsupResult.kind === 'cluster'">
+              <div class="metric-card"><div class="metric-name">簇数量</div><div class="metric-value">{{ unsupResult.n_clusters }}</div></div>
+              <div class="metric-card"><div class="metric-name">轮廓系数</div><div class="metric-value">{{ unsupResult.silhouette ?? 'N/A' }}</div></div>
+              <div class="metric-card" v-if="unsupResult.inertia !== undefined"><div class="metric-name">Inertia</div><div class="metric-value">{{ unsupResult.inertia }}</div></div>
+            </div>
+            <div v-if="unsupResult.kind === 'cluster'" class="cluster-sizes">
+              <span v-for="(v, k) in unsupResult.cluster_sizes" :key="k" class="param-chip">
+                {{ k === '-1' ? '噪声' : '簇 ' + k }}: {{ v }}
+              </span>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="card chart-card" v-if="unsupResult.scatter"><div class="chart" ref="unsupScatter"></div></div>
+            <div class="card chart-card" v-if="unsupResult.elbow"><div class="chart" ref="elbowChart"></div></div>
+            <div class="card chart-card" v-if="unsupResult.kind === 'pca'"><div class="chart" ref="varChart"></div></div>
+          </div>
+        </template>
+
+        <!-- 可视化结果 -->
+        <div class="card chart-card" v-if="mode === 'viz' && vizResult">
+          <div class="chart tall" ref="vizChart"></div>
         </div>
       </section>
+    </main>
 
-      <!-- 算法 -->
-      <section class="card">
-        <h2><span class="step">2</span> 算法与参数</h2>
-        <div class="field">
-          <label>任务类型</label>
-          <div id="task-badge" class="task-badge task-classification">分类</div>
-        </div>
-        <div class="field">
-          <label for="algorithm-select">算法</label>
-          <select id="algorithm-select"></select>
-        </div>
-        <p id="algorithm-desc" class="hint"></p>
-        <div id="param-form" class="param-form"></div>
-      </section>
+    <footer class="footer">机器学习实验平台 · 自研 numpy 算法 + scikit-learn · Vue3 + ECharts + WebSocket</footer>
+  </div>
 
-      <!-- 训练设置 -->
-      <section class="card">
-        <h2><span class="step">3</span> 训练设置</h2>
-        <div class="field">
-          <label>测试集比例: <strong id="test-size-val">20%</strong></label>
-          <input type="range" id="test-size" min="5" max="50" step="5" value="20" />
-        </div>
-        <div class="field">
-          <label for="random-state">随机种子 (random_state)</label>
-          <input type="number" id="random-state" value="42" min="0" max="99999" />
-        </div>
-        <button id="train-btn" class="primary">🚀 开始训练</button>
-        <div id="train-status" class="status"></div>
-      </section>
-    </aside>
-
-    <!-- ============ 右侧结果面板 ============ -->
-    <section class="result-panel">
-      <div id="empty-state" class="empty">
-        <div class="empty-icon">📊</div>
-        <h2>配置完成后点击「开始训练」</h2>
-        <p>评估指标、混淆矩阵、分类报告、特征重要性等结果将展示在这里</p>
-      </div>
-      <div id="results" class="hidden"></div>
-    </section>
-  </main>
-
-  <footer class="footer">机器学习实验平台 · 内置企鹅/鸢尾花/葡萄酒/乳腺癌/糖尿病等经典数据集</footer>
-
-  <script src="app.js"></script>
+  <script src="vendor/vue.global.prod.js"></script>
+  <script src="vendor/echarts.min.js"></script>
+  <script src="js/api.js?v=3"></script>
+  <script src="js/charts.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>

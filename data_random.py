@@ -81,7 +81,7 @@ def save_data_to_csv(X, y, filename='data.csv'):
 
 def main():
     # Generate random data
-    X, y = generate_diagonal_left_data(num_samples=100, num_features=2, num_classes=2, noise=0.1)
+    X, y = generate_diagonal_left_data(num_samples=100, num_features=2, num_classes=2, noise=0.5)
 
     # Save the data to a CSV file
     save_data_to_csv(X, y, filename='data.csv')
