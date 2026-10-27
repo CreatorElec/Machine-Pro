@@ -1,13 +1,3 @@
-# 数据文件
-*.csv
+#data
 dataset/*.csv
-
-# Python 缓存
-__pycache__/
 *.pyc
-
-# 依赖库
-.pylibs/
-
-# IDE 配置
-.trae/
